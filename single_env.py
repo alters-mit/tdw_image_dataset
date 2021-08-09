@@ -53,6 +53,6 @@ if __name__ == "__main__":
                      do_zip=args.zip,
                      train=args.train,
                      val=args.val,
-                     library=args.library)
-    c.run(args.output_dir,
-          scene_name=args.scene_name)
+                     library=args.library,
+                     output_directory=args.output_director)
+    c.run(scene_name=args.scene_name)

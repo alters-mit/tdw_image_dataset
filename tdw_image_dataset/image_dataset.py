@@ -5,7 +5,7 @@ import json
 from datetime import datetime
 from threading import Thread
 from time import time
-from typing import List, Dict, Tuple, Optional
+from typing import List, Dict, Tuple, Optional, Union
 from zipfile import ZipFile
 from distutils import dir_util
 import numpy as np
@@ -24,6 +24,7 @@ RNG: np.random.RandomState = np.random.RandomState(0)
 
 class ImageDataset(Controller):
     def __init__(self,
+                 output_directory: Union[str, Path],
                  port: int = 1071,
                  launch_build: bool = False,
                  materials: bool = False,
@@ -45,6 +46,7 @@ class ImageDataset(Controller):
                  library: str = "models_core.json",
                  random_seed: int = 0):
         """
+        :param output_directory: The path to the root output directory.
         :param port: The port used to connect to the build.
         :param launch_build: If True, automatically launch the build. Always set this to False on a Linux server.
         :param materials: If True, set random visual materials for each sub-mesh of each object.
@@ -69,6 +71,26 @@ class ImageDataset(Controller):
 
         global RNG
         RNG = np.random.RandomState(random_seed)
+
+        if isinstance(output_directory, str):
+            """:field
+            The root output directory.
+            """
+            self.output_directory: Path = Path(output_directory)
+        else:
+            self.output_directory: Path = output_directory
+        if not self.output_directory.exists():
+            self.output_directory.mkdir(parents=True)
+        """:field
+        The images output directory.
+        """
+        self.images_directory: Path = self.output_directory.joinpath("images")
+        if not self.images_directory.exists():
+            self.images_directory.mkdir(parents=True)
+        """:field
+        The path to the metadata file.
+        """
+        self.metadata_path: Path = self.output_directory.joinpath("metadata.txt")
 
         """:field
         The width of the build screen in pixels.
@@ -206,7 +228,8 @@ class ImageDataset(Controller):
                          {"$type": "set_aperture",
                           "aperture": 70},
                          {'$type': 'set_vignette',
-                          'enabled': False}])
+                          'enabled': False},
+                         {"$type": "send_environments"}])
 
         # If we're using HDRI skyboxes, send additional favorable post-process commands.
         if self.skyboxes is not None:
@@ -219,25 +242,19 @@ class ImageDataset(Controller):
                              {"$type": "set_screen_space_reflections",
                               "enabled": False},
                              {"$type": "set_shadow_strength",
-                              "strength": 1.0},
-                             {"$type": "send_environments"}])
+                              "strength": 1.0}])
         # Send the commands.
         resp = self.communicate(commands)
-        return SceneBounds(resp[0])
+        return SceneBounds(resp)
 
-    def generate_metadata(self, dataset_dir: str, scene_name: str) -> None:
+    def generate_metadata(self, scene_name: str) -> None:
         """
         Generate a metadata file for this dataset.
 
-        :param dataset_dir: The dataset directory for images.
         :param scene_name: The scene name.
         """
 
-        root_dir = f"{dataset_dir}/images/"
-        if not os.path.exists(root_dir):
-            os.makedirs(root_dir)
-
-        data = {"dataset": dataset_dir,
+        data = {"dataset": str(self.output_directory.resolve()),
                 "scene": scene_name,
                 "train": self.train,
                 "val": self.val,
@@ -252,23 +269,17 @@ class ImageDataset(Controller):
                 "occlusion": self.occlusion,
                 "less_dark": self.less_dark,
                 "start": datetime.now().strftime("%H:%M %d.%m.%y")}
-        with open(os.path.join(root_dir, "metadata.txt"), "wt") as f:
-            json.dump(data, f, sort_keys=True, indent=4)
+        self.metadata_path.write_text(json.dumps(data, sort_keys=True, indent=4))
 
-    def run(self, dataset_dir: str, scene_name: str) -> None:
+    def run(self, scene_name: str) -> None:
         """
         Generate the dataset.
 
-        :param dataset_dir: The dataset directory for images.
         :param scene_name: The scene name.
         """
 
         # Create the metadata file.
-        self.generate_metadata(dataset_dir,
-                               scene_name=scene_name)
-
-        # The root directory of the output.
-        root_dir = f"{dataset_dir}/images/"
+        self.generate_metadata(scene_name=scene_name)
 
         # The avatar ID.
         a = "a"
@@ -290,7 +301,7 @@ class ImageDataset(Controller):
         pbar = tqdm(total=len(wnids))
 
         # If this is a new dataset, remove the previous list of completed models.
-        done_models_path: Path = Path(dataset_dir).joinpath("processed_records.txt")
+        done_models_path: Path = self.output_directory.joinpath("processed_records.txt")
         if self.new and done_models_path.exists():
             done_models_path.unlink()
 
@@ -325,7 +336,7 @@ class ImageDataset(Controller):
                     continue
 
                 # Create all of the images for this model.
-                dt = self.process_model(record, a, scene_bounds, train_count, val_count, root_dir, w)
+                dt = self.process_model(record, a, scene_bounds, train_count, val_count, w)
                 fps = round((train_count + val_count) / dt)
 
                 # Mark this record as processed.
@@ -335,23 +346,20 @@ class ImageDataset(Controller):
         pbar.close()
 
         # Add the end time to the metadata file.
-        with open(os.path.join(root_dir, "metadata.txt"), "rt") as f:
-            data = json.load(f)
-            end_time = datetime.now().strftime("%H:%M %d.%m.%y")
-            if "end" in data:
-                data["end"] = end_time
-            else:
-                data.update({"end": end_time})
-        with open(os.path.join(root_dir, "metadata.txt"), "wt") as f:
-            json.dump(data, f, sort_keys=True, indent=4)
+        metadata = json.loads(self.metadata_path.read_text())
+        end_time = datetime.now().strftime("%H:%M %d.%m.%y")
+        if "end" in metadata:
+            metadata["end"] = end_time
+        else:
+            metadata.update({"end": end_time})
+        self.metadata_path.write_text(json.dumps(metadata, sort_keys=True, indent=4))
 
         # Terminate the build.
         if self.overwrite:
             self.communicate({"$type": "terminate"})
         # Zip up the images.
         if self.do_zip:
-            zip_dir = Path(dataset_dir)
-            ImageDataset.zip_images(zip_dir)
+            self.zip_images()
 
     def _set_skybox(self, records: List[HDRISkyboxRecord], its_per_skybox: int, hdri_index: int, skybox_count: int) -> Tuple[int, int, Optional[dict]]:
         """
@@ -379,8 +387,7 @@ class ImageDataset(Controller):
             skybox_count = 0
         return hdri_index, skybox_count, command
 
-    def process_model(self, record: ModelRecord, a: str, scene_bounds: SceneBounds, train_count: int, val_count: int,
-                      root_dir: str, wnid: str) -> float:
+    def process_model(self, record: ModelRecord, a: str, scene_bounds: SceneBounds, train_count: int, val_count: int, wnid: str) -> float:
         """
         Capture images of a model.
 
@@ -389,7 +396,6 @@ class ImageDataset(Controller):
         :param scene_bounds: The bounds of the scene.
         :param train_count: Number of train images.
         :param val_count: Number of val images.
-        :param root_dir: The root directory for saving images.
         :param wnid: The wnid of the record.
         :return The time elapsed.
         """
@@ -399,7 +405,7 @@ class ImageDataset(Controller):
         # Get the filename index. If we shouldn't overwrite any images, start after the last image.
         if not self.overwrite:
             # Check if any images exist.
-            wnid_dir = Path(root_dir).joinpath(f"train/{wnid}")
+            wnid_dir = self.images_directory.joinpath(f"train/{wnid}")
             if wnid_dir.exists():
                 max_file_index = -1
                 for image in wnid_dir.iterdir():
@@ -533,7 +539,7 @@ class ImageDataset(Controller):
             resp = self.communicate(commands)
 
             # Create a thread to save the image.
-            t = Thread(target=self.save_image, args=(resp, record, file_index, root_dir, wnid, train, train_count))
+            t = Thread(target=self.save_image, args=(resp, record, file_index, wnid, train, train_count))
             t.daemon = True
             t.start()
             train += 1
@@ -551,22 +557,20 @@ class ImageDataset(Controller):
                           {"$type": "unload_asset_bundles"}])
         return t1 - t0
 
-    def save_image(self, resp, record: ModelRecord, image_count: int, root_dir: str, wnid: str, train: int,
-                   train_count: int) -> None:
+    def save_image(self, resp, record: ModelRecord, image_count: int, wnid: str, train: int, train_count: int) -> None:
         """
         Save an image.
 
         :param resp: The raw response data.
         :param record: The model record.
         :param image_count: The image count.
-        :param root_dir: The root directory.
         :param wnid: The wnid.
         :param train: Number of train images so far.
         :param train_count: Total number of train images to generate.
         """
 
         # Get the directory.
-        directory: Path = Path(root_dir).joinpath("train" if train < train_count else "val").joinpath(wnid)
+        directory: Path = self.images_directory.joinpath("train" if train < train_count else "val").joinpath(wnid)
         if directory.exists():
             # Try to make the directories. Due to threading, they might already be made.
             try:
@@ -718,30 +722,23 @@ class ImageDataset(Controller):
         vec /= np.linalg.norm(vec, axis=0)
         return np.array([vec[0][0], vec[1][0], vec[2][0]])
 
-    @staticmethod
-    def zip_images(zip_dir: Path) -> None:
+    def zip_images(self) -> None:
         """
         Zip up the images.
-
-        :param zip_dir: The zip directory.
         """
-
-        if not zip_dir.exists():
-            zip_dir.mkdir()
 
         # Use a random token to avoid overwriting zip files.
         token = token_urlsafe(4)
-        zip_path = zip_dir.joinpath(f"images_{token}.zip")
-        images_directory = str(zip_dir.joinpath("images").resolve())
+        zip_path = self.output_directory.parent.joinpath(f"images_{token}.zip")
 
         # Source: https://thispointer.com/python-how-to-create-a-zip-archive-from-multiple-files-or-directory/
         with ZipFile(str(zip_path.resolve()), 'w') as zip_obj:
             # Iterate over all the files in directory
-            for folderName, subfolders, filenames in os.walk(images_directory):
+            for folderName, subfolders, filenames in os.walk(str(self.output_directory.resolve())):
                 for filename in filenames:
                     # create complete filepath of file in directory
                     file_path = os.path.join(folderName, filename)
                     # Add file to zip
                     zip_obj.write(file_path, os.path.basename(file_path))
         # Remove the original images.
-        dir_util.remove_tree(images_directory)
+        dir_util.remove_tree(str(self.output_directory.resolve()))

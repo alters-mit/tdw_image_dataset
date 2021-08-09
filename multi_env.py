@@ -32,12 +32,13 @@ if __name__ == "__main__":
                      train=train,
                      val=val,
                      do_zip=False,
-                     library=args.library)
+                     library=args.library,
+                     output_directory=args.dir)
 
     # Generate a "partial" dataset per scene.
     for scene, i in zip(scenes, range(len(scenes))):
         print(f"{scene}\t{i + 1}/{len(scenes)}")
-        c.run(args.dir, scene_name=scene)
+        c.run(scene_name=scene)
     # Terminate the build.
     c.communicate({"$type": "terminate"})
 
