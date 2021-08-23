@@ -19,9 +19,7 @@ from tdw.scene.room_bounds import RoomBounds
 from tdw.release.pypi import PyPi
 from tdw_image_dataset.image_position import ImagePosition
 
-""":class_var
-The required version of TDW.
-"""
+# The required version of TDW.
 REQUIRED_TDW_VERSION: str = "1.8.25"
 
 
