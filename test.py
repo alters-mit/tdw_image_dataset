@@ -3,6 +3,8 @@ from tdw_image_dataset.image_dataset import ImageDataset
 
 """
 Test the core functionality of tdw_image_dataset.
+
+Usage: `python3 test.py`
 """
 
 if __name__ == "__main__":

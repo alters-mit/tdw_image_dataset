@@ -4,6 +4,8 @@ from tdw_image_dataset.image_dataset import ImageDataset
 
 """
 Generate a dataset with multiple environments.
+
+Usage: `python3 multi_env.py [OPTIONS]`
 """
 
 if __name__ == "__main__":

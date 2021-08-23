@@ -12,17 +12,36 @@ import numpy as np
 from tqdm import tqdm
 from tdw.controller import Controller
 from tdw.tdw_utils import TDWUtils
-from tdw.output_data import Occlusion, Images, ImageSensors, Transforms
+from tdw.output_data import OutputData, Occlusion, Images, ImageSensors, Transforms, Version
 from tdw.librarian import ModelLibrarian, MaterialLibrarian, HDRISkyboxLibrarian, ModelRecord, HDRISkyboxRecord
 from tdw.scene.scene_bounds import SceneBounds
 from tdw.scene.room_bounds import RoomBounds
+from tdw.release.pypi import PyPi
 from tdw_image_dataset.image_position import ImagePosition
 
-
-RNG: np.random.RandomState = np.random.RandomState(0)
+""":class_var
+The required version of TDW.
+"""
+REQUIRED_TDW_VERSION: str = "1.8.25"
 
 
 class ImageDataset(Controller):
+    """
+    Generate image datasets. Each image will have a single object in the scene in a random position and orientation.
+    Optionally, the scene might have variable lighting and the object might have variable visual materials.
+
+    The image dataset includes all models in a model library (the default library is models_core.json) sorted by wnid and model name.
+    """
+
+    """:class_var
+    The random number generator.
+    """
+    RNG: np.random.RandomState = np.random.RandomState(0)
+    """:class_var
+    The ID of the avatar.
+    """
+    AVATAR_ID: str = "a"
+
     def __init__(self,
                  output_directory: Union[str, Path],
                  port: int = 1071,
@@ -169,7 +188,13 @@ class ImageDataset(Controller):
         """
         self.materials: bool = materials
 
-        super().__init__(port=port, launch_build=launch_build)
+        super().__init__(port=port, launch_build=launch_build, check_version=False)
+        resp = self.communicate({"$type": "send_version"})
+        for i in range(len(resp) - 1):
+            if OutputData.get_data_type_id(resp[i]) == "vers":
+                build_version = Version(resp[i]).get_tdw_version()
+                PyPi.required_tdw_version_is_installed(build_version=build_version,
+                                                       required_version=REQUIRED_TDW_VERSION)
 
         self.model_librarian = ModelLibrarian(library=library)
         self.material_librarian = MaterialLibrarian("materials_low.json")
@@ -188,12 +213,11 @@ class ImageDataset(Controller):
                     if skybox.location != "interior" and skybox.sun_elevation >= 145:
                         self.skyboxes.append(skybox)
 
-    def initialize_scene(self, scene_command, a="a") -> SceneBounds:
+    def initialize_scene(self, scene_command) -> SceneBounds:
         """
         Initialize the scene.
 
         :param scene_command: The command to load the scene.
-        :param a: The avatar ID.
 
         :return: The [`SceneBounds`](https://github.com/threedworld-mit/tdw/blob/master/Documentation/python/scene_bounds.md) of the scene.
         """
@@ -203,7 +227,7 @@ class ImageDataset(Controller):
         commands = [scene_command,
                     {"$type": "create_avatar",
                      "type": "A_Img_Caps_Kinematic",
-                     "id": a}]
+                     "id": ImageDataset.AVATAR_ID}]
         # Disable physics.
         # Enable jpgs.
         # Set FOV.
@@ -216,14 +240,11 @@ class ImageDataset(Controller):
                          {"$type": "set_img_pass_encoding",
                           "value": False},
                          {'$type': 'set_field_of_view',
-                          'avatar_id': a,
                           'field_of_view': 60},
                          {'$type': 'set_camera_clipping_planes',
-                          'avatar_id': a,
                           'far': 160,
                           'near': 0.01},
                          {"$type": "set_anti_aliasing",
-                          "avatar_id": a,
                           "mode": "subpixel"},
                          {"$type": "set_aperture",
                           "aperture": 70},
@@ -281,9 +302,6 @@ class ImageDataset(Controller):
         # Create the metadata file.
         self.generate_metadata(scene_name=scene_name)
 
-        # The avatar ID.
-        a = "a"
-
         # Initialize the scene.
         scene_bounds: SceneBounds = self.initialize_scene(self.get_add_scene(scene_name))
 
@@ -336,7 +354,7 @@ class ImageDataset(Controller):
                     continue
 
                 # Create all of the images for this model.
-                dt = self.process_model(record, a, scene_bounds, train_count, val_count, w)
+                dt = self.process_model(record, scene_bounds, train_count, val_count, w)
                 fps = round((train_count + val_count) / dt)
 
                 # Mark this record as processed.
@@ -387,12 +405,11 @@ class ImageDataset(Controller):
             skybox_count = 0
         return hdri_index, skybox_count, command
 
-    def process_model(self, record: ModelRecord, a: str, scene_bounds: SceneBounds, train_count: int, val_count: int, wnid: str) -> float:
+    def process_model(self, record: ModelRecord, scene_bounds: SceneBounds, train_count: int, val_count: int, wnid: str) -> float:
         """
         Capture images of a model.
 
         :param record: The model record.
-        :param a: The ID of the avatar.
         :param scene_bounds: The bounds of the scene.
         :param train_count: Number of train images.
         :param val_count: Number of val images.
@@ -442,7 +459,6 @@ class ImageDataset(Controller):
                                   "height": 32,
                                   "width": 32},
                                  {"$type": "set_pass_masks",
-                                  "avatar_id": a,
                                   "pass_masks": []},
                                  {"$type": "set_render_quality",
                                   "render_quality": 0},
@@ -471,7 +487,7 @@ class ImageDataset(Controller):
             # Get a random "room".
             room: RoomBounds = scene_bounds.rooms[RNG.randint(0, len(scene_bounds.rooms))]
             # Get the occlusion
-            occlusion, image_position = self.get_occlusion(record.name, o_id, a, room)
+            occlusion, image_position = self.get_occlusion(record.name, o_id, room)
             if occlusion < self.occlusion:
                 image_positions.append(image_position)
         # Send images.
@@ -480,7 +496,6 @@ class ImageDataset(Controller):
         commands = [{"$type": "send_images",
                      "frequency": "always"},
                     {"$type": "set_pass_masks",
-                     "avatar_id": a,
                      "pass_masks": ["_img", "_id"] if self.id_pass else ["_img"]},
                     {"$type": "set_screen_size",
                      "height": self.screen_height,
@@ -503,10 +518,8 @@ class ImageDataset(Controller):
             # Rotate the object.
             # Get the response.
             commands = [{"$type": "teleport_avatar_to",
-                         "avatar_id": a,
                          "position": p.avatar_position},
                         {"$type": "rotate_sensor_container_to",
-                         "avatar_id": a,
                          "rotation": p.camera_rotation},
                         {"$type": "teleport_object",
                          "id": o_id,
@@ -591,13 +604,12 @@ class ImageDataset(Controller):
                                  output_directory=directory,
                                  resize_to=self.output_size)
 
-    def get_occlusion(self, o_name: str, o_id: int, a_id: str, room: RoomBounds) -> Tuple[float, ImagePosition]:
+    def get_occlusion(self, o_name: str, o_id: int, room: RoomBounds) -> Tuple[float, ImagePosition]:
         """
         Get the "real" grayscale value of an image we hope to capture.
 
         :param o_name: The name of the object.
         :param o_id: The ID of the object.
-        :param a_id: The ID of the avatar.
         :param room: The "room" bounds.
 
         :return: (grayscale, distance, avatar_position, object_position, object_rotation, avatar_rotation)
@@ -670,19 +682,15 @@ class ImageDataset(Controller):
                           "id": o_id,
                           "position": o_p},
                          {"$type": "teleport_avatar_to",
-                          "avatar_id": a_id,
                           "position": a_p},
                          {"$type": "look_at",
-                          "avatar_id": a_id,
                           "object_id": o_id,
                           "use_centroid": True},
                          {"$type": "rotate_sensor_container_by",
                           "angle": pitch,
-                          "avatar_id": a_id,
                           "axis": "pitch"},
                          {"$type": "rotate_sensor_container_by",
                           "angle": yaw,
-                          "avatar_id": a_id,
                           "axis": "yaw"},
                          {"$type": "send_occlusion",
                           "frequency": "once"},

@@ -1,6 +1,11 @@
 from argparse import ArgumentParser
 from tdw_image_dataset.image_dataset import ImageDataset
 
+"""
+Generate an image dataset in a single scene.
+
+Usage: `python3 single_env.py [OPTIONS]`
+"""
 
 if __name__ == "__main__":
     parser = ArgumentParser()
