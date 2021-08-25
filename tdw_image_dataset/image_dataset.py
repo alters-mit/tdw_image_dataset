@@ -192,7 +192,8 @@ class ImageDataset(Controller):
             if OutputData.get_data_type_id(resp[i]) == "vers":
                 build_version = Version(resp[i]).get_tdw_version()
                 PyPi.required_tdw_version_is_installed(build_version=build_version,
-                                                       required_version=REQUIRED_TDW_VERSION)
+                                                       required_version=REQUIRED_TDW_VERSION,
+                                                       comparison="greater_than_or_equals")
 
         self.model_librarian = ModelLibrarian(library=library)
         self.material_librarian = MaterialLibrarian("materials_low.json")
@@ -484,7 +485,7 @@ class ImageDataset(Controller):
         while len(image_positions) < train_count + val_count:
             # Get a random "room".
             room: RoomBounds = scene_bounds.rooms[RNG.randint(0, len(scene_bounds.rooms))]
-            # Get the occlusion
+            # Get the occlusion.
             occlusion, image_position = self.get_occlusion(record.name, o_id, room)
             if occlusion < self.occlusion:
                 image_positions.append(image_position)
