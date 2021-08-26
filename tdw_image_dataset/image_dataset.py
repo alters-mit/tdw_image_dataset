@@ -193,7 +193,7 @@ class ImageDataset(Controller):
                 build_version = Version(resp[i]).get_tdw_version()
                 PyPi.required_tdw_version_is_installed(build_version=build_version,
                                                        required_version=REQUIRED_TDW_VERSION,
-                                                       comparison="greater_than_or_equals")
+                                                       comparison=">=")
 
         self.model_librarian = ModelLibrarian(library=library)
         self.material_librarian = MaterialLibrarian("materials_low.json")
