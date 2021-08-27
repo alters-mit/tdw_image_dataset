@@ -17,7 +17,7 @@ from tdw.librarian import ModelLibrarian, MaterialLibrarian, HDRISkyboxLibrarian
 from tdw.scene.scene_bounds import SceneBounds
 from tdw.scene.room_bounds import RoomBounds
 from tdw.release.pypi import PyPi
-from tdw_image_dataset.image_position import ImagePosition
+from tdw_image_dataset.image_position_avatar_object import ImagePositionAvatarObject
 
 # The required version of TDW.
 REQUIRED_TDW_VERSION: str = "1.8.25"
@@ -437,7 +437,7 @@ class ImageDataset(Controller):
         else:
             file_index = 0
 
-        image_positions: List[ImagePosition] = []
+        image_positions: List[ImagePositionAvatarObject] = []
         o_id = self.get_unique_id()
 
         s = TDWUtils.get_unit_scale(record)
@@ -603,7 +603,7 @@ class ImageDataset(Controller):
                                  output_directory=directory,
                                  resize_to=self.output_size)
 
-    def get_occlusion(self, o_name: str, o_id: int, room: RoomBounds) -> Tuple[float, ImagePosition]:
+    def get_occlusion(self, o_name: str, o_id: int, room: RoomBounds) -> Tuple[float, ImagePositionAvatarObject]:
         """
         Get the "real" grayscale value of an image we hope to capture.
 
@@ -718,10 +718,10 @@ class ImageDataset(Controller):
                 cam_rot = {"x": cam_rot[0], "y": cam_rot[1], "z": cam_rot[2], "w": cam_rot[3]}
             elif r_id == b"tran":
                 o_rot = TDWUtils.array_to_vector4(Transforms(resp[i]).get_rotation(0))
-        return occlusion, ImagePosition(avatar_position=a_p,
-                                        object_position=o_p,
-                                        object_rotation=o_rot,
-                                        camera_rotation=cam_rot)
+        return occlusion, ImagePositionAvatarObject(avatar_position=a_p,
+                                                    object_position=o_p,
+                                                    object_rotation=o_rot,
+                                                    camera_rotation=cam_rot)
 
     @staticmethod
     def sample_spherical(npoints=1, ndim=3) -> np.array:

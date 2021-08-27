@@ -63,17 +63,17 @@ Each object, once instantiated, is set to "unit scale", with its longest extent 
 
 #### 5c. Positional Loop
 
-Gather valid [`ImagePosition`](doc/image_position.md) data until the list of `ImagePosition` objects equals the target number of images to capture.
+Gather valid [image position data](doc/image_position_avatar_object.md) data until the list of image position data objects equals the target number of images to capture.
 
 `ImageDataset` relies on [`Occlusion`](https://github.com/threedworld-mit/tdw/blob/master/Documentation/api/output_data.md#Occlusion) data to determine whether an image has good composition. This data reduces the rendered frame of two `_mask` passes. One `_mask` pass includes environment objects (such as walls and trees) and the other doesn't. Both images are reduced to a single pixel. The returned value is the difference between the grayscale values of each pixel. This isn't much information but it's enough for this use-case and it's very fast. It also doesn't need a large window size to be useful; in fact, it runs faster if the window is smaller. So, to start the positional loop, the entire window is resized to 32x32 and render quality is set to minimal.
 
-If an object is too occluded, the `ImagePosition` is rejected.
+If an object is too occluded, the image position data is rejected.
 
 #### 5d. Image Loop
 
-Once `ImagePosition` has enough cached `ImagePosition` data, it can begin to actually generate images. Image quality is now set to maximum, and the screen size is set to the desired image capture size (by default, 256x256).
+Once image position data has enough cached image position data data, it can begin to actually generate images. Image quality is now set to maximum, and the screen size is set to the desired image capture size (by default, 256x256).
 
-Every iteration, the object and avatar are positioned and rotated according to the cached `ImagePosition` data. Image data is received and written to disk. This image saving is handled via threading to prevent the controller from slowing down.
+Every iteration, the object and avatar are positioned and rotated according to the cached image position data data. Image data is received and written to disk. This image saving is handled via threading to prevent the controller from slowing down.
 
 ##### Optional Additional Commands
 

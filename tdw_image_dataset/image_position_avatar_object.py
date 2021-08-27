@@ -1,9 +1,9 @@
 from typing import Dict
 
 
-class ImagePosition:
+class ImagePositionAvatarObject:
     """
-    The positions and rotations of the avatar and object for an image.
+    The positions and rotations of the avatar and the object object for an image.
 
     Positions are stored as (x, y, z) dictionaries, for example: `{"x": 0, "y": 0, "z": 0}`.
     Rotations are stored as (x, y, z, w) dictionaries, for example: `{"x": 0, "y": 0, "z": 0, "w": 1}`.
