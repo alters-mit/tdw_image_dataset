@@ -21,6 +21,7 @@ from tdw_image_dataset.image_position import ImagePosition
 
 # The required version of TDW.
 REQUIRED_TDW_VERSION: str = "1.8.25"
+RNG: np.random.RandomState = np.random.RandomState(0)
 
 
 class ImageDataset(Controller):
@@ -31,10 +32,6 @@ class ImageDataset(Controller):
     The image dataset includes all models in a model library (the default library is models_core.json) sorted by wnid and model name.
     """
 
-    """:class_var
-    The random number generator.
-    """
-    RNG: np.random.RandomState = np.random.RandomState(0)
     """:class_var
     The ID of the avatar.
     """
@@ -440,31 +437,8 @@ class ImageDataset(Controller):
         image_positions: List[ImagePosition] = []
         o_id = self.get_unique_id()
 
-        s = TDWUtils.get_unit_scale(record)
-
         # Add the object.
-        # Set the screen size to 32x32 (to make the build run faster; we only need the average grayscale values).
-        # Toggle off pass masks.
-        # Set render quality to minimal.
-        # Scale the object to "unit size".
-        resp = self.communicate([{"$type": "add_object",
-                                  "name": record.name,
-                                  "url": record.get_url(),
-                                  "scale_factor": record.scale_factor,
-                                  "category": record.wcategory,
-                                  "rotation": record.canonical_rotation,
-                                  "id": o_id},
-                                 {"$type": "set_screen_size",
-                                  "height": 32,
-                                  "width": 32},
-                                 {"$type": "set_pass_masks",
-                                  "pass_masks": []},
-                                 {"$type": "set_render_quality",
-                                  "render_quality": 0},
-                                 {"$type": "scale_object",
-                                  "id": o_id,
-                                  "scale_factor": {"x": s, "y": s, "z": s}},
-                                 {"$type": "send_transforms"}])
+        resp = self.communicate(self.get_object_initialization_commands(record=record, o_id=o_id))
         # Cache the initial rotation of the object.
         if record.name not in self.initial_rotations:
             self.initial_rotations[record.name] = TDWUtils.array_to_vector4(Transforms(resp[0]).get_rotation(0))
@@ -569,6 +543,39 @@ class ImageDataset(Controller):
                           {"$type": "unload_asset_bundles"}])
         return t1 - t0
 
+    def get_object_initialization_commands(self, record: ModelRecord, o_id: int) -> List[dict]:
+        """
+        :param record: The model record.
+        :param o_id: The object ID.
+
+        :return: Commands for creating and initializing the object.
+        """
+
+        s = TDWUtils.get_unit_scale(record)
+        # Add the object.
+        # Set the screen size to 32x32 (to make the build run faster; we only need the average grayscale values).
+        # Toggle off pass masks.
+        # Set render quality to minimal.
+        # Scale the object to "unit size".
+        return [{"$type": "add_object",
+                 "name": record.name,
+                 "url": record.get_url(),
+                 "scale_factor": record.scale_factor,
+                 "category": record.wcategory,
+                 "rotation": record.canonical_rotation,
+                 "id": o_id},
+                {"$type": "set_screen_size",
+                 "height": 32,
+                 "width": 32},
+                {"$type": "set_pass_masks",
+                 "pass_masks": []},
+                {"$type": "set_render_quality",
+                 "render_quality": 0},
+                {"$type": "scale_object",
+                 "id": o_id,
+                 "scale_factor": {"x": s, "y": s, "z": s}},
+                {"$type": "send_transforms"}]
+
     def save_image(self, resp, record: ModelRecord, image_count: int, wnid: str, train: int, train_count: int) -> None:
         """
         Save an image.
@@ -615,100 +622,36 @@ class ImageDataset(Controller):
         """
 
         # Get a random position for the avatar.
-        a_p = np.array([RNG.uniform(room.x_min, room.x_max),
-                        RNG.uniform(0.4, room.y_max),
-                        RNG.uniform(room.z_min, room.z_max)])
-
-        # Get a random distance from the avatar.
-        d = RNG.uniform(0.8, 3)
-
-        # Get a random position for the object constrained to the environment bounds.
-        o_p = ImageDataset.sample_spherical() * d
-        # Clamp the y value to positive.
-        o_p[1] = abs(o_p[1])
-        o_p = a_p + o_p
-
-        # Clamp the y value of the object.
-        if o_p[1] > room.y_max:
-            o_p[1] = room.y_max
-
+        a_p = self.get_avatar_position(room=room)
+        # Teleport the object.
+        commands = self.get_object_position_commands(o_id=o_id, avatar_position=a_p, room=room)
         # Convert the avatar's position to a Vector3.
         a_p = TDWUtils.array_to_vector3(a_p)
-
-        # Set random camera rotations.
-        yaw = RNG.uniform(-15, 15)
-        pitch = RNG.uniform(-15, 15)
-
-        # Convert the object position to a Vector3.
-        o_p = TDWUtils.array_to_vector3(o_p)
-
-        # Add rotation commands.
-        # If we're clamping the rotation, rotate the object within +/- 30 degrees on each axis.
-        if self.clamp_rotation:
-            o_rot = None
-            commands = [{"$type": "rotate_object_to",
-                         "id": o_id,
-                         "rotation": self.initial_rotations[o_name]},
-                        {"$type": "rotate_object_by",
-                         "id": o_id,
-                         "angle": RNG.uniform(-30, 30),
-                         "axis": "pitch"},
-                        {"$type": "rotate_object_by",
-                         "id": o_id,
-                         "angle": RNG.uniform(-30, 30),
-                         "axis": "yaw"},
-                        {"$type": "rotate_object_by",
-                         "id": o_id,
-                         "angle": RNG.uniform(-30, 30),
-                         "axis": "roll"}]
-        # Set a totally random rotation.
-        else:
-            o_rot = {"x": RNG.uniform(-360, 360),
-                     "y": RNG.uniform(-360, 360),
-                     "z": RNG.uniform(-360, 360),
-                     "w": RNG.uniform(-360, 360)}
-            commands = [{"$type": "rotate_object_to",
-                         "id": o_id,
-                         "rotation": o_rot}]
-
-        # After rotating the object:
-        # 1. Teleport the object.
-        # 2. Teleport the avatar.
-        # 3. Look at the object.
-        # 4. Perturb the camera slightly.
-        # 5. Send grayscale data and image sensor data.
-        commands.extend([{"$type": "teleport_object",
-                          "id": o_id,
-                          "position": o_p},
-                         {"$type": "teleport_avatar_to",
-                          "position": a_p},
-                         {"$type": "look_at",
-                          "object_id": o_id,
-                          "use_centroid": True},
-                         {"$type": "rotate_sensor_container_by",
-                          "angle": pitch,
-                          "axis": "pitch"},
-                         {"$type": "rotate_sensor_container_by",
-                          "angle": yaw,
-                          "axis": "yaw"},
-                         {"$type": "send_occlusion",
+        # Teleport the avatar.
+        commands.append({"$type": "teleport_avatar_to",
+                         "position": a_p})
+        # Rotate the object.
+        commands.extend(self.get_object_rotation_commands(o_id=o_id, o_name=o_name))
+        # Rotate the camera.
+        commands.extend(self.get_camera_rotation_commands(o_id=o_id))
+        # Request output data.
+        commands.extend([{"$type": "send_occlusion",
                           "frequency": "once"},
                          {"$type": "send_image_sensors",
+                          "frequency": "once"},
+                         {"$type": "send_transforms",
                           "frequency": "once"}])
-        # If we clamped the rotation of the object, we need to know its quaternion.
-        if self.clamp_rotation:
-            commands.append({"$type": "send_transforms",
-                             "frequency": "once",
-                             "ids": [o_id]})
-
         # Send the commands.
         resp = self.communicate(commands)
 
         # Parse the output data:
         # 1. The occlusion value of the image.
         # 2. The camera rotation.
+        # 3. The object position and rotation.
         occlusion: float = 0
         cam_rot = None
+        o_rot = None
+        o_p = None
         for i in range(len(resp) - 1):
             r_id = resp[i][4:8]
             if r_id == b"occl":
@@ -717,11 +660,99 @@ class ImageDataset(Controller):
                 cam_rot = ImageSensors(resp[i]).get_sensor_rotation(0)
                 cam_rot = {"x": cam_rot[0], "y": cam_rot[1], "z": cam_rot[2], "w": cam_rot[3]}
             elif r_id == b"tran":
-                o_rot = TDWUtils.array_to_vector4(Transforms(resp[i]).get_rotation(0))
+                transforms = Transforms(resp[i])
+                o_rot = TDWUtils.array_to_vector4(transforms.get_rotation(0))
+                o_p = TDWUtils.array_to_vector3(transforms.get_position(0))
         return occlusion, ImagePosition(avatar_position=a_p,
                                         object_position=o_p,
                                         object_rotation=o_rot,
                                         camera_rotation=cam_rot)
+
+    def get_avatar_position(self, room: RoomBounds) -> np.array:
+        """
+        :param room: The room bounds.
+
+        :return: The position of the avatar for the next image as a numpy array.
+        """
+
+        return np.array([RNG.uniform(room.x_min, room.x_max),
+                         RNG.uniform(0.4, room.y_max),
+                         RNG.uniform(room.z_min, room.z_max)])
+
+    def get_object_position_commands(self, o_id: int, avatar_position: np.array, room: RoomBounds) -> List[dict]:
+        """
+        :param o_id: The object ID.
+        :param avatar_position: The position of the avatar.
+        :param room: The room bounds.
+
+        :return: The position of the object for the next image as a numpy array.
+        """
+
+        # Get a random distance from the avatar.
+        d = RNG.uniform(0.8, 3)
+        # Get a random position for the object constrained to the environment bounds.
+        o_p = ImageDataset.sample_spherical() * d
+        # Clamp the y value to positive.
+        o_p[1] = abs(o_p[1])
+        o_p = avatar_position + o_p
+
+        # Clamp the y value of the object.
+        if o_p[1] > room.y_max:
+            o_p[1] = room.y_max
+        return [{"$type": "teleport_object",
+                 "id": o_id,
+                 "position": TDWUtils.array_to_vector3(o_p)}]
+
+    def get_object_rotation_commands(self, o_id: int, o_name: str) -> List[dict]:
+        """
+        :param o_id: The object ID.
+        :param o_name: The object name.
+
+        :return: A list of commands to rotate the object.
+        """
+
+        # Add rotation commands. If we're clamping the rotation, rotate the object within +/- 30 degrees on each axis.
+        if self.clamp_rotation:
+            return [{"$type": "rotate_object_to",
+                     "id": o_id,
+                     "rotation": self.initial_rotations[o_name]},
+                    {"$type": "rotate_object_by",
+                     "id": o_id,
+                     "angle": RNG.uniform(-30, 30),
+                     "axis": "pitch"},
+                    {"$type": "rotate_object_by",
+                     "id": o_id,
+                     "angle": RNG.uniform(-30, 30),
+                     "axis": "yaw"},
+                    {"$type": "rotate_object_by",
+                     "id": o_id,
+                     "angle": RNG.uniform(-30, 30),
+                     "axis": "roll"}]
+        # Set a totally random rotation.
+        else:
+            return [{"$type": "rotate_object_to",
+                     "id": o_id,
+                     "rotation": {"x": RNG.uniform(-360, 360),
+                                  "y": RNG.uniform(-360, 360),
+                                  "z": RNG.uniform(-360, 360),
+                                  "w": RNG.uniform(-360, 360)}}]
+
+    def get_camera_rotation_commands(self, o_id: int) -> List[dict]:
+        """
+        :param o_id: The object ID.
+
+        :return: A list of commands to rotate the camera.
+        """
+
+        return [{"$type": "look_at",
+                 "object_id": o_id,
+                 "use_centroid": True},
+                {"$type": "rotate_sensor_container_by",
+                 "angle": RNG.uniform(-15, 15),
+                 "axis": "pitch"},
+                {"$type": "rotate_sensor_container_by",
+                 "angle": RNG.uniform(-15, 15),
+                 "axis": "yaw"}]
 
     @staticmethod
     def sample_spherical(npoints=1, ndim=3) -> np.array:
