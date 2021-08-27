@@ -1,8 +1,8 @@
-# ImagePositionAvatarObject
+# ImagePosition
 
-`from tdw_image_dataset.image_position_avatar_object import ImagePositionAvatarObject`
+`from tdw_image_dataset.image_position import ImagePosition`
 
-The positions and rotations of the avatar and the object object for an image.
+The positions and rotations of the avatar and object for an image.
 
 Positions are stored as (x, y, z) dictionaries, for example: `{"x": 0, "y": 0, "z": 0}`.
 Rotations are stored as (x, y, z, w) dictionaries, for example: `{"x": 0, "y": 0, "z": 0, "w": 1}`.
@@ -25,7 +25,7 @@ Rotations are stored as (x, y, z, w) dictionaries, for example: `{"x": 0, "y": 0
 
 #### \_\_init\_\_
 
-**`ImagePositionAvatarObject(avatar_position, camera_rotation, object_position, object_rotation)`**
+**`ImagePosition(avatar_position, camera_rotation, object_position, object_rotation)`**
 
 | Parameter | Type | Default | Description |
 | --- | --- | --- | --- |

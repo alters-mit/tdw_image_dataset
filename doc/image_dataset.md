@@ -13,7 +13,6 @@ The image dataset includes all models in a model library (the default library is
 
 | Variable | Type | Description |
 | --- | --- | --- |
-| `RNG` | np.random.RandomState | The random number generator. |
 | `AVATAR_ID` | str | The ID of the avatar. |
 
 ***
@@ -147,6 +146,18 @@ Capture images of a model.
 
 _Returns:_  The time elapsed.
 
+#### get_object_initialization_commands
+
+**`self.get_object_initialization_commands(record, o_id)`**
+
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| record |  ModelRecord |  | The model record. |
+| o_id |  int |  | The object ID. |
+
+_Returns:_  Commands for creating and initializing the object.
+
 #### save_image
 
 **`self.save_image(resp, record, image_count, wnid, train, train_count)`**
@@ -176,6 +187,53 @@ Get the "real" grayscale value of an image we hope to capture.
 | room |  RoomBounds |  | The "room" bounds. |
 
 _Returns:_  (grayscale, distance, avatar_position, object_position, object_rotation, avatar_rotation)
+
+#### get_avatar_position
+
+**`self.get_avatar_position(room)`**
+
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| room |  RoomBounds |  | The room bounds. |
+
+_Returns:_  The position of the avatar for the next image as a numpy array.
+
+#### get_object_position_commands
+
+**`self.get_object_position_commands(o_id, avatar_position, room)`**
+
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| o_id |  int |  | The object ID. |
+| avatar_position |  np.array |  | The position of the avatar. |
+| room |  RoomBounds |  | The room bounds. |
+
+_Returns:_  The position of the object for the next image as a numpy array.
+
+#### get_object_rotation_commands
+
+**`self.get_object_rotation_commands(o_id, o_name)`**
+
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| o_id |  int |  | The object ID. |
+| o_name |  str |  | The object name. |
+
+_Returns:_  A list of commands to rotate the object.
+
+#### get_camera_rotation_commands
+
+**`self.get_camera_rotation_commands(o_id)`**
+
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| o_id |  int |  | The object ID. |
+
+_Returns:_  A list of commands to rotate the camera.
 
 #### sample_spherical
 
