@@ -182,7 +182,6 @@ class ImageDataset(Controller):
         If True, set random visual materials for each sub-mesh of each object.
         """
         self.materials: bool = materials
-
         super().__init__(port=port, launch_build=launch_build, check_version=False)
         resp = self.communicate({"$type": "send_version"})
         for i in range(len(resp) - 1):
@@ -191,17 +190,21 @@ class ImageDataset(Controller):
                 PyPi.required_tdw_version_is_installed(build_version=build_version,
                                                        required_version=REQUIRED_TDW_VERSION,
                                                        comparison=">=")
-
-        self.model_librarian = ModelLibrarian(library=library)
-        self.material_librarian = MaterialLibrarian("materials_low.json")
-        self.hdri_skybox_librarian = HDRISkyboxLibrarian()
+        """:field
+        The name of the model library file.
+        """
+        self.model_library_file: str = library
+        # Cache the libraries.
+        Controller.MODEL_LIBRARIANS[self.model_library_file] = ModelLibrarian(library=self.model_library_file)
+        Controller.MATERIAL_LIBRARIANS["materials_low.json"] = MaterialLibrarian("materials_low.json")
+        Controller.HDRI_SKYBOX_LIBRARIANS["hdri_skyboxes.json"] = HDRISkyboxLibrarian()
         """:field
         Cached skybox records.
         """
         self.skyboxes: Optional[List[HDRISkyboxRecord]] = None
         # Get skybox records.
         if hdri:
-            self.skyboxes: List[HDRISkyboxRecord] = self.hdri_skybox_librarian.records
+            self.skyboxes: List[HDRISkyboxRecord] = Controller.HDRI_SKYBOX_LIBRARIANS["hdri_skyboxes.json"].records
             # Prefer exterior daytime skyboxes by adding them multiple times to the list.
             if self.less_dark:
                 temp = self.skyboxes[:]
@@ -300,10 +303,11 @@ class ImageDataset(Controller):
         scene_bounds: SceneBounds = self.initialize_scene(self.get_add_scene(scene_name))
 
         # Fetch the WordNet IDs.
-        wnids = self.model_librarian.get_model_wnids()
+        wnids = Controller.MODEL_LIBRARIANS[self.model_library_file].get_model_wnids()
         # Remove any wnids that don't have valid models.
         wnids = [w for w in wnids if len(
-            [r for r in self.model_librarian.get_all_models_in_wnid(w) if not r.do_not_use]) > 0]
+            [r for r in Controller.MODEL_LIBRARIANS[self.model_library_file].get_all_models_in_wnid(w)
+             if not r.do_not_use]) > 0]
 
         # Set the number of train and val images per wnid.
         num_train = self.train / len(wnids)
@@ -328,7 +332,7 @@ class ImageDataset(Controller):
             pbar.set_description(w)
 
             # Get all valid models in the wnid.
-            records = self.model_librarian.get_all_models_in_wnid(w)
+            records = Controller.MODEL_LIBRARIANS[self.model_library_file].get_all_models_in_wnid(w)
             records = [r for r in records if not r.do_not_use]
 
             # Get the train and val counts.
@@ -504,7 +508,8 @@ class ImageDataset(Controller):
                     self.substructures[record.name] = record.substructure
                 for sub_object in self.substructures[record.name]:
                     for i in range(len(sub_object["materials"])):
-                        material_name = self.material_librarian.records[RNG.randint(0, len(self.material_librarian.records))].name
+                        material_name = Controller.MATERIAL_LIBRARIANS["materials_low.json"].records[
+                            RNG.randint(0, len(Controller.MATERIAL_LIBRARIANS["materials_low.json"].records))].name
                         commands.extend([self.get_add_material(material_name),
                                          {"$type": "set_visual_material",
                                           "id": o_id,
