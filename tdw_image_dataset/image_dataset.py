@@ -14,13 +14,13 @@ from tdw.controller import Controller
 from tdw.tdw_utils import TDWUtils
 from tdw.output_data import OutputData, Occlusion, Images, ImageSensors, Transforms, Version
 from tdw.librarian import ModelLibrarian, MaterialLibrarian, HDRISkyboxLibrarian, ModelRecord, HDRISkyboxRecord
-from tdw.scene.scene_bounds import SceneBounds
-from tdw.scene.room_bounds import RoomBounds
+from tdw.scene_data.scene_bounds import SceneBounds
+from tdw.scene_data.region_bounds import RegionBounds
 from tdw.release.pypi import PyPi
 from tdw_image_dataset.image_position import ImagePosition
 
 # The required version of TDW.
-REQUIRED_TDW_VERSION: str = "1.8.25"
+REQUIRED_TDW_VERSION: str = "1.9.0"
 RNG: np.random.RandomState = np.random.RandomState(0)
 
 
@@ -244,9 +244,7 @@ class ImageDataset(Controller):
                           "mode": "subpixel"},
                          {"$type": "set_aperture",
                           "aperture": 70},
-                         {'$type': 'set_vignette',
-                          'enabled': False},
-                         {"$type": "send_environments"}])
+                         {"$type": "send_scene_regions"}])
 
         # If we're using HDRI skyboxes, send additional favorable post-process commands.
         if self.skyboxes is not None:
@@ -458,7 +456,7 @@ class ImageDataset(Controller):
 
         while len(image_positions) < train_count + val_count:
             # Get a random "room".
-            room: RoomBounds = scene_bounds.rooms[RNG.randint(0, len(scene_bounds.rooms))]
+            room: RegionBounds = scene_bounds.rooms[RNG.randint(0, len(scene_bounds.rooms))]
             # Get the occlusion.
             occlusion, image_position = self.get_occlusion(record.name, o_id, room)
             if occlusion < self.occlusion:
@@ -610,21 +608,21 @@ class ImageDataset(Controller):
                                  output_directory=directory,
                                  resize_to=self.output_size)
 
-    def get_occlusion(self, o_name: str, o_id: int, room: RoomBounds) -> Tuple[float, ImagePosition]:
+    def get_occlusion(self, o_name: str, o_id: int, region: RegionBounds) -> Tuple[float, ImagePosition]:
         """
         Get the "real" grayscale value of an image we hope to capture.
 
         :param o_name: The name of the object.
         :param o_id: The ID of the object.
-        :param room: The "room" bounds.
+        :param region: The scene region bounds.
 
         :return: (grayscale, distance, avatar_position, object_position, object_rotation, avatar_rotation)
         """
 
         # Get a random position for the avatar.
-        a_p = self.get_avatar_position(room=room)
+        a_p = self.get_avatar_position(region=region)
         # Teleport the object.
-        commands = self.get_object_position_commands(o_id=o_id, avatar_position=a_p, room=room)
+        commands = self.get_object_position_commands(o_id=o_id, avatar_position=a_p, region=region)
         # Convert the avatar's position to a Vector3.
         a_p = TDWUtils.array_to_vector3(a_p)
         # Teleport the avatar.
@@ -668,22 +666,23 @@ class ImageDataset(Controller):
                                         object_rotation=o_rot,
                                         camera_rotation=cam_rot)
 
-    def get_avatar_position(self, room: RoomBounds) -> np.array:
+    @staticmethod
+    def get_avatar_position(region: RegionBounds) -> np.array:
         """
-        :param room: The room bounds.
+        :param region: The scene region bounds.
 
         :return: The position of the avatar for the next image as a numpy array.
         """
 
-        return np.array([RNG.uniform(room.x_min, room.x_max),
-                         RNG.uniform(0.4, room.y_max),
-                         RNG.uniform(room.z_min, room.z_max)])
+        return np.array([RNG.uniform(region.x_min, region.x_max),
+                         RNG.uniform(0.4, region.y_max),
+                         RNG.uniform(region.z_min, region.z_max)])
 
-    def get_object_position_commands(self, o_id: int, avatar_position: np.array, room: RoomBounds) -> List[dict]:
+    def get_object_position_commands(self, o_id: int, avatar_position: np.array, region: RegionBounds) -> List[dict]:
         """
         :param o_id: The object ID.
         :param avatar_position: The position of the avatar.
-        :param room: The room bounds.
+        :param region: The scene region bounds.
 
         :return: The position of the object for the next image as a numpy array.
         """
@@ -697,8 +696,8 @@ class ImageDataset(Controller):
         o_p = avatar_position + o_p
 
         # Clamp the y value of the object.
-        if o_p[1] > room.y_max:
-            o_p[1] = room.y_max
+        if o_p[1] > region.y_max:
+            o_p[1] = region.y_max
         return [{"$type": "teleport_object",
                  "id": o_id,
                  "position": TDWUtils.array_to_vector3(o_p)}]

@@ -1,7 +1,7 @@
 from typing import List
 import numpy as np
 from tdw.librarian import ModelRecord
-from tdw.scene.room_bounds import RoomBounds
+from tdw.scene_data.region_bounds import RegionBounds
 from tdw_image_dataset.image_dataset import ImageDataset, RNG
 
 
@@ -22,7 +22,7 @@ class ParentToAvatar(ImageDataset):
                           "id": o_id}])
         return commands
 
-    def get_object_position_commands(self, o_id: int, avatar_position: np.array, room: RoomBounds) -> List[dict]:
+    def get_object_position_commands(self, o_id: int, avatar_position: np.array, region: RegionBounds) -> List[dict]:
         return []
 
     def get_camera_rotation_commands(self, o_id: int) -> List[dict]:
