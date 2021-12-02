@@ -61,6 +61,8 @@ The image dataset includes all models in a model library (the default library is
 
 - `materials` If True, set random visual materials for each sub-mesh of each object.
 
+- `model_library_file` The name of the model library file.
+
 - `skyboxes` Cached skybox records.
 
 ***
