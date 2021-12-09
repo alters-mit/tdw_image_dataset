@@ -61,6 +61,8 @@ The image dataset includes all models in a model library (the default library is
 
 - `materials` If True, set random visual materials for each sub-mesh of each object.
 
+- `model_library_file` The name of the model library file.
+
 - `skyboxes` Cached skybox records.
 
 ***
@@ -175,7 +177,7 @@ Save an image.
 
 #### get_occlusion
 
-**`self.get_occlusion(o_name, o_id, room)`**
+**`self.get_occlusion(o_name, o_id, region)`**
 
 Get the "real" grayscale value of an image we hope to capture.
 
@@ -184,31 +186,33 @@ Get the "real" grayscale value of an image we hope to capture.
 | --- | --- | --- | --- |
 | o_name |  str |  | The name of the object. |
 | o_id |  int |  | The ID of the object. |
-| room |  RoomBounds |  | The "room" bounds. |
+| region |  RegionBounds |  | The scene region bounds. |
 
 _Returns:_  (grayscale, distance, avatar_position, object_position, object_rotation, avatar_rotation)
 
 #### get_avatar_position
 
-**`self.get_avatar_position(room)`**
+**`ImageDataset(Controller).get_avatar_position(region)`**
+
+_This is a static function._
 
 
 | Parameter | Type | Default | Description |
 | --- | --- | --- | --- |
-| room |  RoomBounds |  | The room bounds. |
+| region |  RegionBounds |  | The scene region bounds. |
 
 _Returns:_  The position of the avatar for the next image as a numpy array.
 
 #### get_object_position_commands
 
-**`self.get_object_position_commands(o_id, avatar_position, room)`**
+**`self.get_object_position_commands(o_id, avatar_position, region)`**
 
 
 | Parameter | Type | Default | Description |
 | --- | --- | --- | --- |
 | o_id |  int |  | The object ID. |
 | avatar_position |  np.array |  | The position of the avatar. |
-| room |  RoomBounds |  | The room bounds. |
+| region |  RegionBounds |  | The scene region bounds. |
 
 _Returns:_  The position of the object for the next image as a numpy array.
 

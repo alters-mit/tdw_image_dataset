@@ -19,6 +19,10 @@ Generate a dataset of synthetic images using [TDW](https://github.com/threedworl
 2. `git pull`
 3. `python3 download_build.py`
 
+## Changelog
+
+[Read this.](doc/changelog.md)
+
 ## Usage
 
 See [`single_env.py`](https://github.com/alters-mit/tdw_image_dataset/blob/main/controllers/single_env.py), [`multi_env.py`](https://github.com/alters-mit/tdw_image_dataset/blob/main/controllers/multi_env.py), and [`test.py`](https://github.com/alters-mit/tdw_image_dataset/blob/main/controllers/test.py). You may want to run `test.py` first to make sure that you can generate image datasets.
