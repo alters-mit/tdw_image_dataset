@@ -460,7 +460,7 @@ class ImageDataset(Controller):
 
         while len(image_positions) < train_count + val_count:
             # Get a random "room".
-            room: RegionBounds = scene_bounds.rooms[RNG.randint(0, len(scene_bounds.rooms))]
+            room: RegionBounds = scene_bounds.regions[RNG.randint(0, len(scene_bounds.regions))]
             # Get the occlusion.
             occlusion, image_position = self.get_occlusion(record.name, o_id, room)
             if occlusion < self.occlusion:

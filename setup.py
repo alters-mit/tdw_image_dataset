@@ -5,7 +5,7 @@ readme = Path('README.md').read_text(encoding='utf-8')
 
 setup(
     name='tdw_image_dataset',
-    version="1.0.0",
+    version="1.0.1",
     description='Generate synthetic image datasets with TDW',
     long_description=readme,
     long_description_content_type='text/markdown',
