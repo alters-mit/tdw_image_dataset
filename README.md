@@ -35,7 +35,7 @@ To increase variability, each image has randomized camera and positional paramet
 
 ### 1. Generate metadata
 
-Every dataset has an associated `metadata.txt` file, which contains a serialized JSON object of all of the parameters used to generate this dataset. This can be very useful if you are generating many datasets with slightly different parameters.
+Every dataset has an associated `metadata.txt` file, which contains a serialized JSON object of all of the parameters used to initialize this dataset. This can be very useful if you are generating many datasets with slightly different parameters.
 
 ### 2. Initialize the scene
 
