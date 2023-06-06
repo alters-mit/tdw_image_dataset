@@ -1,3 +1,7 @@
+# 1.0.2
+
+- Fixed: Crash due to `add_material` being called for a material from `materials_med.json` instead of `materials_low.json`.
+
 # 1.0.1
 
 - Upgraded for TDW v1.10.0

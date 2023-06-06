@@ -510,7 +510,8 @@ class ImageDataset(Controller):
                     for i in range(len(sub_object["materials"])):
                         material_name = Controller.MATERIAL_LIBRARIANS["materials_low.json"].records[
                             RNG.randint(0, len(Controller.MATERIAL_LIBRARIANS["materials_low.json"].records))].name
-                        commands.extend([self.get_add_material(material_name),
+                        commands.extend([self.get_add_material(material_name,
+                                                               library="materials_low.json"),
                                          {"$type": "set_visual_material",
                                           "id": o_id,
                                           "material_name": material_name,
