@@ -12,15 +12,13 @@ import numpy as np
 from tqdm import tqdm
 from tdw.controller import Controller
 from tdw.tdw_utils import TDWUtils
-from tdw.output_data import OutputData, Occlusion, Images, ImageSensors, Transforms, Version
+from tdw.output_data import Occlusion, Images, ImageSensors, Transforms
 from tdw.librarian import ModelLibrarian, MaterialLibrarian, HDRISkyboxLibrarian, ModelRecord, HDRISkyboxRecord
 from tdw.scene_data.scene_bounds import SceneBounds
 from tdw.scene_data.region_bounds import RegionBounds
-from tdw.release.pypi import PyPi
 from tdw_image_dataset.image_position import ImagePosition
 
 # The required version of TDW.
-REQUIRED_TDW_VERSION: str = "1.9.0"
 RNG: np.random.RandomState = np.random.RandomState(0)
 
 
@@ -50,6 +48,7 @@ class ImageDataset(Controller):
                  show_objects: bool = True,
                  clamp_rotation: bool = True,
                  max_height: float = 0.5,
+                 unocclusion: float = 0.14,
                  occlusion: float = 0.45,
                  less_dark: bool = True,
                  id_pass: bool = False,
@@ -72,7 +71,8 @@ class ImageDataset(Controller):
         :param show_objects: If True, show objects.
         :param clamp_rotation: If true, clamp the rotation to +/- 30 degrees around each axis.
         :param max_height: The percentage of the environment height that is the ceiling for the avatar and object. Must be between 0 and 1.
-        :param occlusion: The occlusion threshold. Lower value = slower FPS, better composition. Must be between 0 and 1.
+        :param unocclusion: A number between 0 and 1. At 1, images will be rejected unless they are entirely occupied by objects. At 0, images will be accepted regardless of how much of the image is occupied by objects.
+        :param occlusion: The occlusion threshold, between 0 and 1, defined by `1 - (unoccluded - occluded)`. Lower value = slower FPS, better composition.
         :param less_dark: If True, there will be more daylight exterior skyboxes (requires hdri == True)
         :param id_pass: If True, send and save the _id pass.
         :param overwrite: If True, overwrite existing images.
@@ -135,7 +135,11 @@ class ImageDataset(Controller):
         """
         self.max_height: float = max_height
         """:field
-        The occlusion threshold. Lower value = slower FPS, better composition. Must be between 0 and 1.
+        A number between 0 and 1. At 1, images will be rejected unless they are entirely occupied by objects. At 0, images will be accepted regardless of how much of the image is occupied by objects.
+        """
+        self.unocclusion: float = unocclusion
+        """:field
+        The occlusion threshold, between 0 and 1, defined by `1 - (unoccluded - occluded)`. Lower value = slower FPS, better composition.
         """
         self.occlusion: float = occlusion
         """:field
@@ -183,13 +187,6 @@ class ImageDataset(Controller):
         """
         self.materials: bool = materials
         super().__init__(port=port, launch_build=launch_build, check_version=False)
-        resp = self.communicate({"$type": "send_version"})
-        for i in range(len(resp) - 1):
-            if OutputData.get_data_type_id(resp[i]) == "vers":
-                build_version = Version(resp[i]).get_tdw_version()
-                PyPi.required_tdw_version_is_installed(build_version=build_version,
-                                                       required_version=REQUIRED_TDW_VERSION,
-                                                       comparison=">=")
         """:field
         The name of the model library file.
         """
@@ -284,6 +281,7 @@ class ImageDataset(Controller):
                 "clamp_rotation": self.clamp_rotation,
                 "show_objects": self.show_objects,
                 "max_height": self.max_height,
+                "unocclusion": self.unocclusion,
                 "occlusion": self.occlusion,
                 "less_dark": self.less_dark,
                 "start": datetime.now().strftime("%H:%M %d.%m.%y")}
@@ -462,8 +460,8 @@ class ImageDataset(Controller):
             # Get a random "room".
             room: RegionBounds = scene_bounds.regions[RNG.randint(0, len(scene_bounds.regions))]
             # Get the occlusion.
-            occlusion, image_position = self.get_occlusion(record.name, o_id, room)
-            if occlusion < self.occlusion:
+            occlusion, unocclusion, image_position = self.get_occlusion(record.name, o_id, room)
+            if occlusion >= self.unocclusion and 1 - (unocclusion - occlusion) < self.occlusion:
                 image_positions.append(image_position)
         # Send images.
         # Set the screen size.
@@ -614,7 +612,7 @@ class ImageDataset(Controller):
                                  output_directory=directory,
                                  resize_to=self.output_size)
 
-    def get_occlusion(self, o_name: str, o_id: int, region: RegionBounds) -> Tuple[float, ImagePosition]:
+    def get_occlusion(self, o_name: str, o_id: int, region: RegionBounds) -> Tuple[int, int, ImagePosition]:
         """
         Get the "real" grayscale value of an image we hope to capture.
 
@@ -622,7 +620,7 @@ class ImageDataset(Controller):
         :param o_id: The ID of the object.
         :param region: The scene region bounds.
 
-        :return: (grayscale, distance, avatar_position, object_position, object_rotation, avatar_rotation)
+        :return: (occlusion, unocclusion, image position)
         """
 
         # Get a random position for the avatar.
@@ -649,10 +647,11 @@ class ImageDataset(Controller):
         resp = self.communicate(commands)
 
         # Parse the output data:
-        # 1. The occlusion value of the image.
+        # 1. The occlusion values of the image.
         # 2. The camera rotation.
         # 3. The object position and rotation.
-        occlusion: float = 0
+        occlusion: int = 0
+        unocclusion: int = 0
         cam_rot = None
         o_rot = None
         o_p = None
@@ -660,6 +659,7 @@ class ImageDataset(Controller):
             r_id = resp[i][4:8]
             if r_id == b"occl":
                 occlusion = Occlusion(resp[i]).get_occluded()
+                unocclusion = Occlusion(resp[i]).get_unoccluded()
             elif r_id == b"imse":
                 cam_rot = ImageSensors(resp[i]).get_sensor_rotation(0)
                 cam_rot = {"x": cam_rot[0], "y": cam_rot[1], "z": cam_rot[2], "w": cam_rot[3]}
@@ -667,10 +667,10 @@ class ImageDataset(Controller):
                 transforms = Transforms(resp[i])
                 o_rot = TDWUtils.array_to_vector4(transforms.get_rotation(0))
                 o_p = TDWUtils.array_to_vector3(transforms.get_position(0))
-        return occlusion, ImagePosition(avatar_position=a_p,
-                                        object_position=o_p,
-                                        object_rotation=o_rot,
-                                        camera_rotation=cam_rot)
+        return occlusion, unocclusion, ImagePosition(avatar_position=a_p,
+                                                     object_position=o_p,
+                                                     object_rotation=o_rot,
+                                                     camera_rotation=cam_rot)
 
     @staticmethod
     def get_avatar_position(region: RegionBounds) -> np.array:
