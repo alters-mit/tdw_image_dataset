@@ -461,7 +461,7 @@ class ImageDataset(Controller):
             room: RegionBounds = scene_bounds.regions[RNG.randint(0, len(scene_bounds.regions))]
             # Get the occlusion.
             occlusion, unocclusion, image_position = self.get_occlusion(record.name, o_id, room)
-            if occlusion >= self.unocclusion and 1 - (unocclusion - occlusion) / 255 < self.occlusion:
+            if occlusion < self.unocclusion and 1 - (unocclusion - occlusion) / 255 < self.occlusion:
                 image_positions.append(image_position)
         # Send images.
         # Set the screen size.
